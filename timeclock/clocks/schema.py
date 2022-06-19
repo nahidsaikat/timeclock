@@ -1,5 +1,6 @@
 import datetime
 import graphene
+import pytz
 from graphene.types.generic import GenericScalar
 from distutils.util import strtobool
 from graphene_django import DjangoObjectType
@@ -35,7 +36,7 @@ class CreateClockIn(graphene.Mutation):
 
         clock = UserClock(
             user=info.context.user,
-            clocked_in=datetime.datetime.utcnow()
+            clocked_in=datetime.datetime.now(tz=pytz.utc)
         )
         clock.save()
         return CreateClockIn(clock.clocked_in)
@@ -63,7 +64,7 @@ class CreateClockOut(graphene.Mutation):
             raise Exception("You have already clocked out")
 
         clock = queryset.get()
-        clock.clocked_out = datetime.datetime.utcnow()
+        clock.clocked_out = datetime.datetime.now(tz=pytz.utc)
         clock.save()
 
         return CreateClockOut(clock.clocked_out)
@@ -90,11 +91,27 @@ class Query(graphene.ObjectType):
     @login_required
     def resolve_clocked_hours(root, info):
         user = info.context.user
-        clock = UserClock.objects.filter(user=user, clocked_out__isnull=True)
+        today = 0
+        for clock in UserClock.objects.filter(user=user, clocked_in__date=datetime.date.today()):
+            td = clock.clocked_out - clock.clocked_in
+            today += (td.seconds // 3600)
+
+        week = 0
+        last_seven = datetime.datetime.today() - datetime.timedelta(days=7)
+        for clock in UserClock.objects.filter(user=user, clocked_in__date__gte=last_seven):
+            td = clock.clocked_out - clock.clocked_in
+            week += (td.seconds // 3600)
+
+        month = 0
+        last_thirty = datetime.datetime.today() - datetime.timedelta(days=30)
+        for clock in UserClock.objects.filter(user=user, clocked_in__date__gte=last_thirty):
+            td = clock.clocked_out - clock.clocked_in
+            month += (td.seconds // 3600)
+
         return {
-            "today": 8,
-            "Current_week": 40,
-            "current_month": 168
+            "today": today,
+            "Current_week": week,
+            "current_month": month
         }
 
 
